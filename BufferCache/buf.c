@@ -2,82 +2,141 @@
 #include <stdlib.h>
 #include "buf.h"
 #include "queue.h"
-#include "DIsk.h"
+#include "Disk.h"
+#include <string.h> // memcpy
 
-int gBufCount = 0;
+// DIsk.h : #define BLOCK_SIZE (32)
+
+int gBufNumInCache = 0;
 
 void BufInit(void)
 {
 	// 리스트 헤드 초기화
-	gBufCount = 0;
-	TAILQ_INIT(pBufList);
+	gBufNumInCache = 0;
+	TAILQ_INIT(&pBufList);
 	for (int i = 0; i < MAX_BUFLIST_NUM; i++)
-		TAILQ_INIT(ppStateListHead[i]);
-	TAILQ_INIT(pLruListHead);
+		TAILQ_INIT(&ppStateListHead[i]);
+	TAILQ_INIT(&pLruListHead);
+
+	// Disk.h 파일 초기화
+	DevCreateDisk();
+	DevOpenDisk();
 }
 
 void BufRead(int blkno, char* pData)
 {
-	Buf *targetBuf;
-	TAILQ_FOREACH(targetBuf, pBufList, blist)
+	Buf *targetBuf;	// Buffer to Read
+
+	// find blkno in buffer list
+	TAILQ_FOREACH(targetBuf, &pBufList, blist)
 		if (targetBuf->blkno == blkno)
 			break;
-	// IF. blkno가 buffer list에 없다면
-		// IF. Buffer replacement /// 캐시 꽉참
-			// victim = LRU list의 HEAD;
-			// IF. victim이 dirty면,
-				// disk에 저장하고
 
-			// (재사용을 위해)
-			// bufferlist에서 victim 삭제
+	if (targetBuf == NULL)	// blkno가 buffer list에 없다면
+	{
+		if (gBufNumInCache >= MAX_BUF_NUM)	// IF.  캐시 꽉차면,  (즉, Buffer replacement)
+		{
+			Buf *victim = TAILQ_FIRST(&pLruListHead); // victim 설정
+			if (victim->state == BUF_STATE_DIRTY)	// IF. victim이 dirty면,
+				DevWriteBlock(blkno, (char*)targetBuf->pMem);// disk에 저장하고
+
+			 // bufferlist에서 victim 삭제
+			TAILQ_REMOVE(&pBufList, victim, blist);
 			// clean/dirty list에서 victim 삭제
+			TAILQ_REMOVE(&ppStateListHead[victim->state], victim, slist);
 			// LRU list에서 victim 삭제
-
-		// ELSE. /// 캐시 널널
-			// Buf구조체 할당
-			// pMem 할당
+			TAILQ_REMOVE(&pLruListHead, victim, llist);
+			// (재사용을 위해 free ㄴㄴ, target으로 설정)
+			targetBuf = victim;
+		}
+		else {	// 캐시 널널하면, Buf구조체 할당
+			targetBuf = (Buf*)malloc(sizeof(Buf));
+			targetBuf->pMem = malloc(BLOCK_SIZE);
+			gBufNumInCache++;
+		}
 		// blkno 세팅
-		// DevReadBlock(blkno, pMem);
+		targetBuf->blkno = blkno;
+		// 블록 읽어오기;
+		DevReadBlock(blkno, (char*)targetBuf->pMem);
 
 		// buffer list의 HEAD에 넣는다
+		TAILQ_INSERT_HEAD(&pBufList, targetBuf, blist);
 		// clean list의 TAIL에 넣는다
-	
-	// 해당하는 blkno의 pMem을 pData에 '복사한다.'(즉, 포인터 넘기기 ㄴㄴ)
+		targetBuf->state = BUF_STATE_CLEAN;
+		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_CLEAN], targetBuf, slist);
+	}
+	else
+		TAILQ_REMOVE(&pLruListHead, targetBuf, llist);
+
+	// 해당하는 blk의 pMem을 pData에 '복사한다.'(즉, 포인터 넘기기 ㄴㄴ)
+	memcpy(pData, targetBuf->pMem, BLOCK_SIZE);
 	// 현재 접근되는 buffer는 LRU list의 tail에 넣는다
+	TAILQ_INSERT_TAIL(&pLruListHead, targetBuf, llist);
+
 	return;
 }
 
 // pMem에 써주고 CleanList에서제외, DirtyList에 추가 (이미 더티면뭐 냅두고)
 void BufWrite(int blkno, char* pData)
 {
-	// IF. blkno가 buffer list에 없다면
-		// IF. Buffer replacement /// 캐시 꽉참
-			// victim = LRU list의 HEAD;
-			// IF. victim이 dirty면,
-				// disk에 저장하고
+	Buf *targetBuf;	// Buffer to Write
 
-			// (재사용을 위해)
+	// find blkno in buffer list
+	TAILQ_FOREACH(targetBuf, &pBufList, blist)
+		if (targetBuf->blkno == blkno)
+			break;
+
+	if (targetBuf == NULL)	// blkno가 buffer list에 없다면
+	{
+		if (gBufNumInCache >= MAX_BUF_NUM)	// IF.  캐시 꽉차면,  (즉, Buffer replacement)
+		{
+			Buf *victim = TAILQ_FIRST(&pLruListHead); // victim 설정
+			if (victim->state == BUF_STATE_DIRTY)	// IF. victim이 dirty면,
+				DevWriteBlock(blkno, (char*)targetBuf->pMem);// disk에 저장하고
+
 			// bufferlist에서 victim 삭제
+			TAILQ_REMOVE(&pBufList, victim, blist);
 			// clean/dirty list에서 victim 삭제
+			TAILQ_REMOVE(&ppStateListHead[victim->state], victim, slist);
 			// LRU list에서 victim 삭제
+			TAILQ_REMOVE(&pLruListHead, victim, llist);
+			// (재사용을 위해 free ㄴㄴ, target으로 설정)
+			targetBuf = victim;
+		}
+		else {	// 캐시 널널하면, Buf구조체 할당
+			targetBuf = (Buf*)malloc(sizeof(Buf));
+			targetBuf->pMem = malloc(BLOCK_SIZE);
+			gBufNumInCache++;
+		}
 
-		// ELSE. /// 캐시 널널
-			// Buf구조체 할당
-			// pMem 할당
 		// blkno 세팅
-		// pData를 blkno의 pMem에 '복사한다' (즉, 포인터 넘기기 ㄴㄴ)
+		targetBuf->blkno = blkno;
+		// 블록 읽어오기;
+		DevReadBlock(blkno, (char*)targetBuf->pMem);
 
 		// buffer list의 HEAD에 넣는다
+		TAILQ_INSERT_HEAD(&pBufList, targetBuf, blist);
 		// dirty list의 TAIL에 넣는다
+		targetBuf->state = BUF_STATE_DIRTY;
+		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_DIRTY], targetBuf, slist);
+	}
+	else
+		TAILQ_REMOVE(&pLruListHead, targetBuf, llist);
 
-	// ELSE
-		// pData를 blkno의 pMem에 '복사한다' (즉, 포인터 넘기기 ㄴㄴ)
-		// LRU list에서 삭제
-		// IF clean list에 있다면?
-			// buffer를 clean list에서 삭제
-			// buffer를 dirty list의 TAIL에 추가
+	// pData를 blkno의 pMem에 '복사한다' (즉, 포인터 넘기기 ㄴㄴ)
+	memcpy(targetBuf->pMem, pData, BLOCK_SIZE);
+	if (targetBuf->state == BUF_STATE_CLEAN) // IF. clean list에 있다면?
+	{
+		targetBuf->state = BUF_STATE_DIRTY;
+		// buffer를 clean list에서 삭제
+		TAILQ_REMOVE(&ppStateListHead[BUF_LIST_CLEAN], targetBuf, slist);
+		// buffer를 dirty list의 TAIL에 추가
+		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_DIRTY], targetBuf, slist);
+	}
 
 	// 현재 접근되는 buffer는 LRU list의 tail에 넣는다
+	TAILQ_INSERT_TAIL(&pLruListHead, targetBuf, llist);
+
 	return;
 }
 
@@ -85,30 +144,68 @@ void BufWrite(int blkno, char* pData)
 // 저장 후에, buffer는 dirty list에서 clean list의 tail로 이동한다.
 void BufSync(void)
 {
+	Buf *item;
 	// WHILE. dirty list의 head가 null이 아니면
+	TAILQ_FOREACH(item, &ppStateListHead[BUF_LIST_DIRTY], slist)
+	{
 		// buffer를 DevWriteBlock(..)으로 디스크에 저장
+		DevWriteBlock(item->blkno, item->pMem);
+
 		// buffer를 clean list의 TAIL로 이동
+		TAILQ_REMOVE(&ppStateListHead[BUF_LIST_DIRTY], item, slist);
+		item->state = BUF_STATE_CLEAN;
+		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_CLEAN], item, slist);
+	}
+	return;
 }
 
 
 
 /*
- * GetBufInfoByListNum: Get all buffers in a list specified by listnum.
- *                      This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
- */
+* GetBufInfoByListNum: Get all buffers in a list specified by listnum.
+*                      This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
+*/
 void GetBufInfoByListNum(StateList listnum, Buf** ppBufInfo, int* pNumBuf)
-{
+{// MYprecondition : ppBufInfo is NOT allocated. pNumBUf IS allocated
+	Buf *item;
+	int bufNum, i;
 
+	TAILQ_FOREACH(item, &ppStateListHead[listnum], slist)
+		bufNum++;
+	*ppBufInfo = (Buf*)malloc(sizeof(Buf)*bufNum);
+
+	*pNumBuf = bufNum;
+	i = 0;
+	TAILQ_FOREACH(item, &ppStateListHead[listnum], slist)
+	{
+		/// 다 복사해서 넘겨?
+		(*ppBufInfo)[i++].blkno = item->blkno;
+	}
+
+	return;
 }
 
 
 
 /*
- * GetBufInfoInLruList: Get all buffers in a list specified at the LRU list.
- *                         This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
- */
+* GetBufInfoInLruList: Get all buffers in a list specified at the LRU list.
+*                         This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
+*/
 void GetBufInfoInLruList(Buf** ppBufInfo, int* pNumBuf)
-{
+{// MYprecondition : ppBufInfo is NOT allocated. pNumBUf IS allocated
+	Buf *item;
+	int i;
 
+	*ppBufInfo = (Buf*)malloc(sizeof(Buf)*gBufNumInCache);
+
+	*pNumBuf = gBufNumInCache;
+	i = 0;
+	TAILQ_FOREACH(item, &pLruListHead, llist)
+	{
+		/// 다 복사해서 넘겨?
+		(*ppBufInfo)[i++].blkno = item->blkno;
+	}
+
+	return;
 }
 
