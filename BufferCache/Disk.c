@@ -9,6 +9,23 @@
 #include "Disk.h"
 
 int fd; 
+int diskReadCount = 0;
+int diskWriteCount = 0;
+
+void DevResetDiskAccessCount(void)
+{
+	diskReadCount = diskWriteCount = 0;
+}
+
+int DevGetDiskReadCount(void)
+{
+	return diskReadCount;
+}
+
+int DevGetDiskWriteCount(void)
+{
+	return diskWriteCount;
+}
 
 void DevCreateDisk(void)
 {
@@ -28,10 +45,13 @@ void DevReadBlock(int blkno, char* pBuf)
 {
    __DevMoveBlock(blkno);
    read(fd, pBuf, BLOCK_SIZE);
+   diskReadCount++;
 }
 
 void DevWriteBlock(int blkno, char* pBuf)
 {
    __DevMoveBlock(blkno);
    write(fd, pBuf, BLOCK_SIZE);
+   diskWriteCount++;
 }
+

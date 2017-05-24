@@ -1,10 +1,10 @@
-main: Disk.o buf.o main.o
-		gcc -o main main.o Disk.o buf.o
+testcase: Disk.o buf.o testcase.o
+		gcc -o testcase testcase.o Disk.o buf.o
 Disk.o: Disk.c Disk.h
 		gcc -c Disk.c
 buf.o: buf.c buf.h queue.h
 		gcc -c buf.c
-main.o: main.c buf.h
-		gcc -c main.c
+testcase.o: testcase.c buf.h Disk.h
+		gcc -c testcase.c 
 clean:
-		rm main main.o Disk.o buf.o
+		rm testcase testcase.o Disk.o buf.o

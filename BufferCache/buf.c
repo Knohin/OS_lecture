@@ -117,7 +117,7 @@ void BufSync(void)
 {
 	Buf *item;
 	// WHILE. dirty list의 head가 null이 아니면
-	TAILQ_FOREACH(item, &ppStateListHead[BUF_LIST_DIRTY], slist)
+	while ((item = TAILQ_FIRST(&ppStateListHead[BUF_LIST_DIRTY])) != NULL)
 	{
 		// buffer를  디스크에 저장
 		DevWriteBlock(item->blkno, item->pMem);
@@ -139,19 +139,14 @@ void BufSync(void)
 void GetBufInfoByListNum(StateList listnum, Buf** ppBufInfo, int* pNumBuf)
 {// MYprecondition : ppBufInfo is NOT allocated. pNumBUf IS allocated
 	Buf *item;
-	int bufNum, i;
+	int bufNum=0, i=0;
 
-	TAILQ_FOREACH(item, &ppStateListHead[listnum], slist)
-		bufNum++;
-	*ppBufInfo = (Buf*)malloc(sizeof(Buf)*bufNum);
-
-	*pNumBuf = bufNum;
-	i = 0;
 	TAILQ_FOREACH(item, &ppStateListHead[listnum], slist)
 	{
-		/// 다 복사해서 넘겨?
-		(*ppBufInfo)[i++].blkno = item->blkno;
+		ppBufInfo[i++] = item;
+		bufNum++;
 	}
+	*pNumBuf = bufNum;
 
 	return;
 }
@@ -165,17 +160,11 @@ void GetBufInfoByListNum(StateList listnum, Buf** ppBufInfo, int* pNumBuf)
 void GetBufInfoInLruList(Buf** ppBufInfo, int* pNumBuf)
 {// MYprecondition : ppBufInfo is NOT allocated. pNumBUf IS allocated
 	Buf *item;
-	int i;
-
-	*ppBufInfo = (Buf*)malloc(sizeof(Buf)*gBufNumInCache);
+	int i=0;
 
 	*pNumBuf = gBufNumInCache;
-	i = 0;
 	TAILQ_FOREACH(item, &pLruListHead, llist)
-	{
-		/// 다 복사해서 넘겨?
-		(*ppBufInfo)[i++].blkno = item->blkno;
-	}
+		ppBufInfo[i++] = item;
 
 	return;
 }
