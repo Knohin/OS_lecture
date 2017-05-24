@@ -28,7 +28,7 @@ Buf* getNewBuffer(int blkno) /// 이름이...
 	{
 		Buf *victim = TAILQ_FIRST(&pLruListHead); // victim 설정
 		if (victim->state == BUF_STATE_DIRTY)	// IF. victim이 dirty면,
-			DevWriteBlock(blkno, (char*)victim->pMem);// disk에 저장하고
+			DevWriteBlock(victim->blkno, (char*)victim->pMem);// disk에 저장하고
 
 		TAILQ_REMOVE(&pBufList, victim, blist);
 		TAILQ_REMOVE(&ppStateListHead[victim->state], victim, slist);

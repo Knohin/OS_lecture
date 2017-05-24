@@ -35,7 +35,6 @@ int testcase1(){
     // Write 6 blocks
     // the Garbage collection has been done by BufDaemon when i is 10, 12, 14, but after write buf
 	for( i = 9; i < 15; i++ ){
-		
 		sprintf(pData, "[block %d]", i);
 		BufWrite(i, pData);
     }
