@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "buf.h"
 #include "queue.h" // <sys/queue.h>로 수정해서 실행 해야 되는데 헤더파일에도 이게 있는데?
+
 #include "Disk.h"
 #include <string.h> // memcpy
 
@@ -67,10 +68,10 @@ void BufRead(int blkno, char* pData)
 	}
 	else
 		TAILQ_REMOVE(&pLruListHead, targetBuf, llist);
+	TAILQ_INSERT_TAIL(&pLruListHead, targetBuf, llist);
 
 	// 해당하는 blk의 pMem을 pData에 '복사한다.'(즉, 포인터 넘기기 ㄴㄴ)
 	memcpy(pData, targetBuf->pMem, BLOCK_SIZE);
-	TAILQ_INSERT_TAIL(&pLruListHead, targetBuf, llist);
 
 	return;
 }
@@ -90,23 +91,23 @@ void BufWrite(int blkno, char* pData)
 
 		// targetBuf 세팅
 		targetBuf->blkno = blkno;
-		DevReadBlock(blkno, (char*)targetBuf->pMem);
 		targetBuf->state = BUF_STATE_DIRTY;
 		TAILQ_INSERT_HEAD(&pBufList, targetBuf, blist);
 		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_DIRTY], targetBuf, slist);
 	}
 	else
 		TAILQ_REMOVE(&pLruListHead, targetBuf, llist);
+	TAILQ_INSERT_TAIL(&pLruListHead, targetBuf, llist);
 
-	// pData를 blkno의 pMem에 '복사한다' (즉, 포인터 넘기기 ㄴㄴ)
-	memcpy(targetBuf->pMem, pData, BLOCK_SIZE);
 	if (targetBuf->state == BUF_STATE_CLEAN) // IF. clean list에 있다면?
 	{
 		targetBuf->state = BUF_STATE_DIRTY;
 		TAILQ_REMOVE(&ppStateListHead[BUF_LIST_CLEAN], targetBuf, slist);
 		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_DIRTY], targetBuf, slist);
 	}
-	TAILQ_INSERT_TAIL(&pLruListHead, targetBuf, llist);
+
+	// pData를 blkno의 pMem에 '복사한다' (즉, 포인터 넘기기 ㄴㄴ)
+	memcpy(targetBuf->pMem, pData, BLOCK_SIZE);
 
 	return;
 }
@@ -127,9 +128,7 @@ void BufSync(void)
 		item->state = BUF_STATE_CLEAN;
 		TAILQ_INSERT_TAIL(&ppStateListHead[BUF_LIST_CLEAN], item, slist);
 	}
-	return;
 }
-
 
 
 /*
@@ -137,9 +136,9 @@ void BufSync(void)
 *                      This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
 */
 void GetBufInfoByListNum(StateList listnum, Buf** ppBufInfo, int* pNumBuf)
-{// MYprecondition : ppBufInfo is NOT allocated. pNumBUf IS allocated
+{
 	Buf *item;
-	int bufNum=0, i=0;
+	int bufNum = 0, i = 0;
 
 	TAILQ_FOREACH(item, &ppStateListHead[listnum], slist)
 	{
@@ -147,25 +146,30 @@ void GetBufInfoByListNum(StateList listnum, Buf** ppBufInfo, int* pNumBuf)
 		bufNum++;
 	}
 	*pNumBuf = bufNum;
-
-	return;
 }
-
-
-
 /*
 * GetBufInfoInLruList: Get all buffers in a list specified at the LRU list.
 *                         This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
 */
 void GetBufInfoInLruList(Buf** ppBufInfo, int* pNumBuf)
-{// MYprecondition : ppBufInfo is NOT allocated. pNumBUf IS allocated
+{
 	Buf *item;
-	int i=0;
+	int i = 0;
 
 	*pNumBuf = gBufNumInCache;
 	TAILQ_FOREACH(item, &pLruListHead, llist)
 		ppBufInfo[i++] = item;
-
-	return;
 }
+/*
+* GetBufInfoInBufferList: Get all buffers in the buffer list.
+*                         This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
+*/
+void GetBufInfoInBufferList(Buf** ppBufInfo, int* pNumBuf)
+{
+	Buf *item;
+	int i = 0;
 
+	*pNumBuf = gBufNumInCache;
+	TAILQ_FOREACH(item, &pBufList, blist)
+		ppBufInfo[i++] = item;
+}

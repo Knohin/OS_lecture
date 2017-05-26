@@ -55,6 +55,12 @@ extern void GetBufInfoByListNum(StateList listnum, Buf** ppBufInfo, int* pNumBuf
 extern void GetBufInfoInLruList(Buf** ppBufInfo, int* pNumBuf);
 
 
+/*
+ * GetBufInfoInBufferList: Get all buffers in the buffer list.
+ *                         This function receives a memory pointer to "ppBufInfo" that can contain the buffers.
+ */
+extern void GetBufInfoInBufferList(Buf** ppBufInfo, int* pNumBuf);
+
 
 #endif /* BUF_H__ */
 

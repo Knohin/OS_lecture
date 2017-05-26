@@ -35,6 +35,7 @@ int testcase1(){
     // Write 6 blocks
     // the Garbage collection has been done by BufDaemon when i is 10, 12, 14, but after write buf
 	for( i = 9; i < 15; i++ ){
+		
 		sprintf(pData, "[block %d]", i);
 		BufWrite(i, pData);
     }
@@ -151,6 +152,29 @@ void PrintBufInfo()
 {
 	int		i, j, numBuf = 0;
 	Buf*	ppBufInfo[MAX_BUF_NUM];
+
+
+        memset( ppBufInfo, 0, (MAX_BUF_NUM * sizeof(Buf*)) );
+        GetBufInfoInBufferList(ppBufInfo, &numBuf );
+
+        printf( "Num of Bufs in the buffer list : %d\n", numBuf );
+    for( i = 0; i < numBuf; i++ ){
+                printf( "Buf[%d,", ppBufInfo[i]->blkno );
+                if ( ppBufInfo[i]->state == BUF_STATE_CLEAN )
+                {
+                        printf( "C, " );
+                }
+                else if ( ppBufInfo[i]->state ==  BUF_STATE_DIRTY )
+                {
+                        printf( "D, " );
+                }
+                else {
+                        printf( "I, " );
+                }
+    }
+
+    printf( "\n----------------------------------\n" );
+
 
 	memset( ppBufInfo, 0, (MAX_BUF_NUM * sizeof(Buf*)) );
 	GetBufInfoByListNum( BUF_LIST_DIRTY, ppBufInfo, &numBuf );
